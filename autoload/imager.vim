@@ -1,92 +1,125 @@
 " FUNCTION: imager#RenderImages() {{{1
 function! imager#RenderImages()
-	let cursor_position = [line('.'), col('.')]
-
-	let new_windows = s:GetImageList()
-	for winid in s:Union([keys(g:imager#windows), keys(new_windows)])
-		" The information about the old window
-
-		" If the window no longer exists, kill all of its images
-		if !has_key(new_windows, winid)
-			for q in keys(g:imager#windows[winid])
-				let g:ter = g:imager#windows[winid][q]
-				call s:KillImage(g:imager#windows[winid][q].terminal)
-			endfor
-			continue
-
-			" If a new window exists, load all of its images
-		elseif !has_key(g:imager#windows, winid)
-			let new = new_windows[winid]
-			call s:ShowWindowImages({}, new.images, winid)
-			continue
-		endif
-
-		" If the window exists in both lists, go on to compare them
-		let new = new_windows[winid]
-		let old = g:imager#windows[winid]
-
-		" If all of the properties match, display new images and kill old ones
-		if s:WindowUnchanged(old, new)
-			call s:ShowWindowImages(old.images, new.images, winid)
-
-			" If not all of the properties match, completely rerender the images
-		else
-			for q in keys(old.images)
-				call s:KillImage(old.images[q].terminal)
-			endfor
-
-			call s:ShowWindowImages({}, new.images, winid)
-		endif
-	endfor
-
-	let g:imager#windows = new_windows
-
-	call cursor(cursor_position)
-endfunction
-" }}}
-
-" Private functions
-" FUNCTION: s:GetImageList() {{{1
-function! s:GetImageList()
-	" Store information required for displaying images of each window
-	let image_list = {}
-
-	" Remember the origional window
+	" Remember the origional window and cursor
 	let origional_winid = win_getid()
+	let origional_cursor = [line('.'), col('.')]
 
-	" Loop through all windows, and check the buffer for images if the window is
-	" of a valid filetype
-	for window in range(1, winnr('$'))
-		" Go to the window
-		let winid = win_getid(window)
-		call win_gotoid(winid)
+	" Generate a new list of images
+	" Image list dictionary format: {'row,col':{path, height, <terminal>}}
+	let new = {}
+	let old = g:imager#images
 
-		" Get the window name
+	" Cycle through the windows and call the function to get its images
+	for i in range(1, winnr('$'))
 		let name_split = split(expand('%:t'), '\.')
-
-		" Get the list of images for the window if it is a valid filetype
 		if len(name_split) > 1 && index(g:imager#filetypes, name_split[-1]) > -1
+			" Navigate to the window and call the function
+			call win_gotoid(win_getid(i))
+			let window_images = s:GetWindowImages()
 
-			" Get information about the window itself
-			let image_list[winid] = {}
-
-			let screenpos = win_screenpos(0)
-			let image_list[winid].x = screenpos[1]
-			let image_list[winid].y = screenpos[0]
-
-			let image_list[winid].first = line('w0')
-			let image_list[winid].height = line('w$') - line('w0') + 1
-
-			" Add the list of visible images to the dictionary
-			let image_list[winid].images = s:GetWindowImages()
+			" Add all of the values from the function to the master list
+			for q in keys(window_images)
+				let new[q] = window_images[q]
+			endfor
 		endif
 	endfor
 
-	call win_gotoid(origional_winid)
+	" Cycle through old images, and remove all inactive ones
+	for q in keys(old)
+		" Migrate the terminal to the new image if there is an identical old one
+		if has_key(new, q) && new[q].path == old[q].path && new[q].height == old[q].height
+			let new[q].terminal = old[q].terminal
 
-	return image_list
+		else
+			" Kill the old window if it does not have a new counterpart
+			call s:KillImage(old[q].terminal)
+		endif
+	endfor
+
+	" Cycle through the new images, and load all new ones
+	for q in keys(new)
+		" If the new image hasn't been linked to an old one, render it
+		if !has_key(new[q], 'terminal')
+			" Get the necessary values for rendering
+			let row = split(q, ',')[0] - 1 
+			let col = split(q, ',')[1] - 1
+			let path = new[q].path
+			let height = new[q].height
+
+			" Set the terminal to the output from showimage
+			let new[q].terminal = s:ShowImage(path, col, row, height)
+		endif
+	endfor
+
+	" Set the global image list to the newly created one
+	let g:imager#images = new
+
+	" Return to the origional window and cursor position
+	call win_gotoid(origional_winid)
+	call cursor(origional_cursor)
 endfunction
 " }}}
+
+" FUNCTION: imager#EnableImages() {{{1
+function! imager#EnableImages()
+	let g:imager#enabled = 1
+
+	" Hide the text for defining images
+	set concealcursor=nivc
+	syntax match imageDefinition /.*!img path:".\+" height:\d\+$/ conceal
+
+	" Generate the autocommand for the specified filetypes
+	let filetypes_string = ''
+	for q in g:imager#filetypes
+		let filetypes_string .= '*.' . q . ','
+	endfor
+	let filetypes_string = filetypes_string[0:-2]
+
+	augroup imagerRender
+		autocmd!
+		execute 'autocmd CursorMoved ' . filetypes_string . ' call imager#RenderImages()'
+	augroup END
+
+	" Rerender all of the images
+	call imager#RenderImages()
+endfunction
+" }}}
+" FUNCTION: imager#DisableImages() {{{1
+function! imager#DisableImages()
+	let g:imager#enabled = 0
+
+	" Show the text for defining images
+	syntax match imageDefinition /.*!img path:".\+" height:\d\+$/
+
+	augroup imagerRender
+		autocmd!
+	augroup END
+
+	" Kill all existing images
+	for q in keys(g:imager#images)
+		call s:KillImage(g:imager#images[q].terminal)
+	endfor
+	let g:imager#images = {}
+endfunction
+" }}}
+" FUNCTION: imager#ReloadImages() {{{1
+function! imager#ReloadImages()
+	if g:imager#enabled
+		call imager#Disable()
+	endif
+	call imager#Enable()
+endfunction
+" }}}
+" FUNCTION: imager#ToggleImages() {{{1
+function! imager#ToggleImages()
+	if g:imager#enabled
+		call imager#Disable()
+	else
+		call imager#Enable()
+	endif
+endfunction
+" }}}
+
 " FUNCTION: s:GetWindowImages() {{{1
 function! s:GetWindowImages()
 	" Create a list
@@ -101,9 +134,28 @@ function! s:GetWindowImages()
 		" Check if the line contains !img to signify that it is an image
 		if line != '' && substitute(line, '.*!img path:".\+" height:\d\+$', '', 'i') == ''
 			" Parse the data from the line, and add it to the window image list
-			let path = substitute(line, '^.*path:"\(.\+\)" .*$', '\1', 'i')
 			let height = str2nr(substitute(line, '^.*height:\(\d\+\)$', '\1', 'i'))
-			let image_dict[i] = {'path':path, 'height':height}
+			let path = substitute(line, '^.*path:"\(.\+\)" .*$', '\1', 'i')
+
+			let parents = 0
+			for q in split(path, '\zs')
+				if q == '.'
+					let parents += 1
+					continue
+				endif
+				break
+			endfor
+
+			if parents > 0
+				let path = expand('%:p' . repeat(':h', parents)) . path[parents:-1] 
+			endif
+			let g:pa = path
+			let g:p = '%:p' . repeat(':h', parents)
+
+			" Get the screen coords of the image to use as the key
+			let coords = screenpos(0, i, 1)
+			let coord_string = coords.row . ',' . coords.col
+			let image_dict[coord_string] = {'path':expand(path), 'height':height}
 		endif
 	endfor
 
@@ -111,45 +163,17 @@ function! s:GetWindowImages()
 endfunction
 " }}}
 
-" FUNCTION: s:ShowWindowImages(old, new, x, y, first, height) {{{1
-function! s:ShowWindowImages(old, new, winid)
-	" Loop through the old images looking for images to kill
-	for image in keys(a:old)
-		" If the image doesnt exists in the new list, or is different, migrate
-		" the terminal info to the new image list
-		if has_key(a:new, image) && s:ImageUnchanged(a:old[image], a:new[image])
-			let a:new[image].terminal = a:old[image].terminal
-
-			" Kill the image if it is not in the new images, or it is different
-		else
-			call s:KillImage(a:old[image].terminal)
-		endif
-	endfor
-
-	" Loop through the new images looking for images to load
-	for image in keys(a:new)
-		" Only load the image if it doesn't have a terminal specified, otherwise
-		" it is already loaded
-		if !has_key(a:new[image], 'terminal')
-			let path = a:new[image].path
-			let height = a:new[image].height
-			let screenpos = screenpos(a:winid, image, 1)
-			let x = screenpos.col - 1
-			let y = screenpos.row - 1
-
-			let a:new[image].terminal = s:ShowImage(path, x, y, height)
-		endif
-	endfor
-endfunction
-" }}}
 " FUNCTION: s:ShowImage(path, x, y, height) {{{1
 " Display a single image at a certain terminal position
 function! s:ShowImage(path, x, y, height)
-	let g:n = [a:path, a:x, a:y, a:height]
 	let origional_buffer = bufnr()
 
-	" Set the command to execute to open the image
-	let command = 'show-image ' . a:path . ' ' . a:x . ' ' . a:y . ' 1000000 ' . a:height
+	" Format the command to execute
+	let identifier = getpid() . '-' . g:imager#max_id
+	let g:imager#max_id += 1
+
+	let command = printf('%s %s %s %s %s %s', g:imager#script_path, identifier, a:path, a:x, a:y, a:height)
+	let g:cmd = command
 
 	" Run the command in a terminal in a new tab, then close it
 	execute 'terminal ' . command
@@ -159,27 +183,6 @@ function! s:ShowImage(path, x, y, height)
 	execute origional_buffer . 'buffer'
 
 	return terminal_buffer
-endfunction
-" }}}
-
-" FUNCTION: s:WindowUnchanged(old, new) {{{1
-function! s:WindowUnchanged(old, new)
-	for property in ['x', 'y', 'first', 'height']
-		if a:old[property] != a:new[property]
-			return 0
-		endif
-	endfor
-	return 1
-endfunction
-" }}}
-" FUNCTION: s:ImageUnchanged(old, new) {{{1
-function! s:ImageUnchanged(old, new)
-	for property in ['height', 'path']
-		if a:old[property] != a:new[property]
-			return 0
-		endif
-	endfor
-	return 1
 endfunction
 " }}}
 " FUNCTION: s:KillImage(terminal) {{{1

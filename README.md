@@ -2,6 +2,25 @@
 Display real images (not just ascii) inside of vim using Üeberzug
 This plugin will only work in terminal vim/neovim and while running X11.
 
+## Installation
+
+To install Üeberzug, run the following command in the terminal.\
+`pip3 install ueberzug`
+
+### Install with Vim Plug
+Add the following to your vimrc\
+`Plug 'AdamTillou/vim-imager'`
+
+Then reload vim and run the command
+`PlugInstall`
+
+### Install with Vundle
+Add the following to your vimrc\
+`Plugin 'AdamTillou/vim-imager'`
+
+Then reload vim and run the command
+`PluginInstall`
+
 ## Inserting an Image
 Imager will insert an image wherever you place the following text in your file:\
 `<<img path="PATH-TO-IMAGE" height=HEIGHT-IN-LINES>>`

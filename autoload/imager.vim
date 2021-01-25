@@ -179,6 +179,7 @@ function! s:ShowImage(path, x, y, height)
 
 	" Run the command in a terminal in a new tab, then close it
 	execute 'terminal ' . command
+	setlocal nobuflisted
 	let terminal_buffer = bufnr()
 
 	" Return to the origional buffer

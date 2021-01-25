@@ -66,7 +66,8 @@ function! imager#EnableImages()
 
 	" Hide the text for defining images
 	set concealcursor=nivc
-	syntax match imageDefinition /.*!img path:".\+" height:\d\+$/ conceal
+	syntax match imageDefinition /^.*<< *img path=".\+" height=\d\+ *>>.*$/ conceal
+	syntax match imageDefinition /^.*<< *img height=\d\+ path=".\+" *>>.*$/ conceal
 
 	" Generate the autocommand for the specified filetypes
 	let filetypes_string = ''
@@ -89,7 +90,8 @@ function! imager#DisableImages()
 	let g:imager#enabled = 0
 
 	" Show the text for defining images
-	syntax match imageDefinition /.*!img path:".\+" height:\d\+$/
+	syntax match imageDefinition /^.*<< *img path=".\+" height=\d\+ *>>.*$/
+	syntax match imageDefinition /^.*<< *img height=\d\+ path=".\+" *>>.*$/
 
 	augroup imagerRender
 		autocmd!
@@ -105,17 +107,17 @@ endfunction
 " FUNCTION: imager#ReloadImages() {{{1
 function! imager#ReloadImages()
 	if g:imager#enabled
-		call imager#Disable()
+		call imager#DisableImages()
 	endif
-	call imager#Enable()
+	call imager#EnableImages()
 endfunction
 " }}}
 " FUNCTION: imager#ToggleImages() {{{1
 function! imager#ToggleImages()
 	if g:imager#enabled
-		call imager#Disable()
+		call imager#DisableImages()
 	else
-		call imager#Enable()
+		call imager#EnableImages()
 	endif
 endfunction
 " }}}
@@ -131,11 +133,13 @@ function! s:GetWindowImages()
 	for i in range(first_line, last_line)
 		let line = getline(i)
 
-		" Check if the line contains !img to signify that it is an image
-		if line != '' && substitute(line, '.*!img path:".\+" height:\d\+$', '', 'i') == ''
+		" Check if the line matches one of the valid image formats
+		if line != '' &&
+					\ ( substitute(line, '^.*<< *img path=".\+" height=\d\+ *>>.*$', '', 'i') == '' ||
+					\   substitute(line, '^.*<< *img height=\d\+ path=".\+" *>>.*$', '', 'i') == '' )
 			" Parse the data from the line, and add it to the window image list
-			let height = str2nr(substitute(line, '^.*height:\(\d\+\)$', '\1', 'i'))
-			let path = substitute(line, '^.*path:"\(.\+\)" .*$', '\1', 'i')
+			let height = str2nr(substitute(line, '^.*height=\(\d\+\).*$', '\1', 'i'))
+			let path = substitute(line, '^.*path="\(.\+\)".*$', '\1', 'i')
 
 			let parents = 0
 			for q in split(path, '\zs')
@@ -149,8 +153,6 @@ function! s:GetWindowImages()
 			if parents > 0
 				let path = expand('%:p' . repeat(':h', parents)) . path[parents:-1] 
 			endif
-			let g:pa = path
-			let g:p = '%:p' . repeat(':h', parents)
 
 			" Get the screen coords of the image to use as the key
 			let coords = screenpos(0, i, 1)

@@ -10,11 +10,11 @@ function! imager#RenderImages()
 	let old = g:imager#images
 
 	" Cycle through the windows and call the function to get its images
+	let g:bufs = []
 	for i in range(1, winnr('$'))
+		call win_gotoid(win_getid(i))
 		let name_split = split(expand('%:t'), '\.')
 		if len(name_split) > 1 && index(g:imager#filetypes, name_split[-1]) > -1
-			" Navigate to the window and call the function
-			call win_gotoid(win_getid(i))
 			let window_images = s:GetWindowImages()
 
 			" Add all of the values from the function to the master list
@@ -70,15 +70,9 @@ function! imager#EnableImages()
 	syntax match imageDefinition /^.*<< *img height=\d\+ path=".\+" *>>.*$/ conceal
 
 	" Generate the autocommand for the specified filetypes
-	let filetypes_string = ''
-	for q in g:imager#filetypes
-		let filetypes_string .= '*.' . q . ','
-	endfor
-	let filetypes_string = filetypes_string[0:-2]
-
 	augroup imagerRender
 		autocmd!
-		execute 'autocmd CursorMoved ' . filetypes_string . ' call imager#RenderImages()'
+		autocmd CursorMoved * call imager#RenderImages()
 	augroup END
 
 	" Rerender all of the images
@@ -124,6 +118,7 @@ endfunction
 
 " FUNCTION: s:GetWindowImages() {{{1
 function! s:GetWindowImages()
+	call add(g:bufs, bufnr())
 	" Create a list
 	let image_dict = {}
 

@@ -1,5 +1,5 @@
 # Vim Imager
-Display inline images in vim using Ueberzug.
+Display real images (not just ascii) inside of vim using Üeberzug
 This plugin will only work in terminal vim/neovim and while running X11.
 
 ## Inserting an Image
@@ -45,3 +45,9 @@ Toggle imager being enabled or disabled\
 
 Forcibly reload all displayed images\
 `:ReloadImages`
+
+## Screenshots
+#### With imager disabled
+![imager-off-screenshot](screenshots/ImagerOff.png)
+#### With imager enabled
+![imager-on-screenshot](screenshots/ImagerOn.png)

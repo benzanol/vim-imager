@@ -12,6 +12,7 @@ command! EnableImages noa call s:EnableImages()
 command! DisableImages noa call s:DisableImages()
 command! ReloadImages noa call s:ReloadImages()
 command! ToggleImages noa call s:ToggleImages()
+command! RefreshImages noa call s:RenderImages()
 
 " Remove filler lines when saving
 autocmd BufWritePre * if g:imager#enabled | call s:RemoveFillerLines() | endif
@@ -20,8 +21,15 @@ autocmd ExitPre * if g:imager#enabled | call s:DisableImages() | endif
 
 " FUNCTION: s:RenderImages() {{{1
 function! s:RenderImages()
-	if !g:imager#enabled || !s:IsWindowChanged()
+	if !g:imager#enabled
 		return 0
+	endif
+	
+	if substitute(mode(), 'v', '', 'i') != mode()
+		let visual_mode = 1
+		norm! 
+	else
+		let visual_mode = 0
 	endif
 
 	" Remember the origional window and cursor
@@ -30,34 +38,12 @@ function! s:RenderImages()
 
 	" Generate a new list of images
 	" Image list dictionary format: {'row,col':{path, height, <terminal>}}
-	let new = {}
 	let old = g:imager#images
+	let g:imager#images = {}
 
 	" Cycle through the windows and call the function to get its images
-	for i in range(1, winnr('$'))
-		if !s:IsBufferEnabled(winbufnr(i))
-			continue
-		endif
-
-		call win_gotoid(win_getid(i))
-		let window_images = s:GetWindowImages()
-
-		" Add all of the values from the function to the master dictionary
-		for q in window_images
-			if q.shown
-				let coords = screenpos(i, q.line, 1)
-
-				" If the image is shown, but screenpos is 0, it starts above the buffer
-				if coords.row == 0
-					let coords = screenpos(i, line('w0'), 1)
-					let coords.row -= line('w0') - q.line
-				endif
-
-				let coord_string = coords.row . ',' . string(coords.col + q.indent - 1)
-				let new[coord_string] = q
-			endif
-		endfor
-	endfor
+	windo call s:GenerateImageDict()
+	let new = g:imager#images
 
 	" Cycle through old images, and remove all inactive ones
 	let any_missing = 0
@@ -79,6 +65,8 @@ function! s:RenderImages()
 		for q in keys(new)
 			" If the new image hasn't been linked to an old one, render it
 			if !has_key(new[q], 'terminal')
+				" Check if the right number of filler lines are after the image
+
 				" Get the necessary values for rendering
 				let row = split(q, ',')[0] - 1 
 				let col = split(q, ',')[1] - 1
@@ -95,6 +83,10 @@ function! s:RenderImages()
 	" Return to the origional window and cursor position
 	call win_gotoid(origional_winid)
 	norm! `z
+	
+	if visual_mode
+		norm! gv
+	endif
 
 	return 1
 endfunction
@@ -103,6 +95,13 @@ endfunction
 " FUNCTION: s:EnableImages() {{{1
 function! s:EnableImages()
 	let g:imager#enabled = 1
+	
+	if !exists('g:terminal_buffer')
+		let origional_buffer = bufnr()
+		enew
+		let g:terminal_buffer = bufnr()
+		execute origional_buffer . 'buffer'
+	endif
 
 	" Hide the text for defining images
 	set concealcursor=nivc
@@ -111,7 +110,9 @@ function! s:EnableImages()
 	syntax match imagerFiller /<<imgline>>$/ conceal
 
 	function! TimerHandler(timer)
-		call s:RenderImages()
+		if s:IsWindowChanged()
+			call s:RenderImages()
+		endif
 	endfunction
 
 	call s:AddFillerLines()
@@ -209,6 +210,18 @@ function! s:IsBufferEnabled(bufnr)
 	endif
 endfunction
 " }}}
+" FUNCTION: s:IsLineImage(string) {{{1
+function! s:IsLineImage(string)
+	if a:string == ''
+		return 0
+	elseif substitute(a:string, '.*<< *img path=".\+" height=\d\+ *>>.*$', '', '') == '' ||
+				\ substitute(a:string, '.*<< *img height=\d\+ path=".\+" *>>.*$', '', '') == ''
+		return 1
+	else
+		return 0
+	endif
+endfunction
+" }}}
 " FUNCTION: s:GetWindowImages() {{{1
 function! s:GetWindowImages()
 	" Create a list
@@ -222,11 +235,8 @@ function! s:GetWindowImages()
 	let last_line = line('w$')
 	for i in range(1, line('$'))
 		let line = getline(i)
-		if line == ''
-			continue
-
-			" Check if the line matches one of the valid image formats
-		elseif substitute(line, '^.*<< *img path=".\+" height=\d\+ *>>.*$', '', '') == '' || substitute(line, '^.*<< *img height=\d\+ path=".\+" *>>.*$', '', '') == ''
+		" Check if the line matches one of the valid image formats
+		if s:IsLineImage(line)
 			let new_image = {}
 
 			" Parse the data from the line, and add it to the window image list
@@ -270,6 +280,31 @@ function! s:GetWindowImages()
 	endfor
 
 	return images
+endfunction
+" }}}
+" FUNCTION: s:GenerateImageDict() {{{1
+function! s:GenerateImageDict()
+	if !s:IsBufferEnabled(bufnr())
+		return 0
+	endif
+
+	let window_images = s:GetWindowImages()
+
+	" Add all of the values from the function to the master dictionary
+	for q in window_images
+		if q.shown
+			let coords = screenpos(winnr(), q.line, 1)
+
+			" If the image is shown, but screenpos is 0, it starts above the buffer
+			if coords.row == 0
+				let coords = screenpos(0, line('w0'), 1)
+				let coords.row -= line('w0') - q.line
+			endif
+
+			let coord_string = coords.row . ',' . string(coords.col + q.indent - 1)
+			let g:imager#images[coord_string] = q
+		endif
+	endfor
 endfunction
 " }}}
 " FUNCTION: s:ShowImage(x, y, dict) {{{1

@@ -25,6 +25,7 @@ function! imager#RenderImages()
 	endfor
 
 	" Cycle through old images, and remove all inactive ones
+	let any_missing = 0
 	for q in keys(old)
 		" Migrate the terminal to the new image if there is an identical old one
 		if has_key(new, q) && new[q].path == old[q].path && new[q].height == old[q].height
@@ -32,24 +33,30 @@ function! imager#RenderImages()
 
 		else
 			" Kill the old window if it does not have a new counterpart
+			let any_missing = 1
 			call s:KillImage(old[q].terminal)
 		endif
 	endfor
 
-	" Cycle through the new images, and load all new ones
-	for q in keys(new)
-		" If the new image hasn't been linked to an old one, render it
-		if !has_key(new[q], 'terminal')
-			" Get the necessary values for rendering
-			let row = split(q, ',')[0] - 1 
-			let col = split(q, ',')[1] - 1
-			let path = new[q].path
-			let height = new[q].height
+	" Only cycle through new windows if the window list has changed at all
+	if any_missing || len(keys(old)) != len(keys(new))
+		" Replace all of the filler lines
+		call s:RemoveFillerLines()
+		call s:AddFillerLines(new)
 
-			" Set the terminal to the output from showimage
-			let new[q].terminal = s:ShowImage(path, col, row, height)
-		endif
-	endfor
+		" Cycle through the new images, and load all new ones
+		for q in keys(new)
+			" If the new image hasn't been linked to an old one, render it
+			if !has_key(new[q], 'terminal')
+				" Get the necessary values for rendering
+				let row = split(q, ',')[0] - 1 
+				let col = split(q, ',')[1] - 1
+
+				" Set the terminal to the output from showimage
+				let new[q].terminal = s:ShowImage(new[q].path, col, row, new[q].height)
+			endif
+		endfor
+	endif
 
 	" Set the global image list to the newly created one
 	let g:imager#images = new
@@ -96,6 +103,7 @@ function! imager#DisableImages()
 		call s:KillImage(g:imager#images[q].terminal)
 	endfor
 	let g:imager#images = {}
+	call s:RemoveFillerLines()
 endfunction
 " }}}
 " FUNCTION: imager#ReloadImages() {{{1
@@ -115,6 +123,13 @@ function! imager#ToggleImages()
 	endif
 endfunction
 " }}}
+" FUNCTION: imager#Write() {{{1
+function! imager#Write()
+	call s:RemoveFillerLines()
+	noa write
+	call s:AddFillerLines(g:imager#images)
+endfunction
+" }}}
 
 " FUNCTION: s:GetWindowImages() {{{1
 function! s:GetWindowImages()
@@ -129,15 +144,18 @@ function! s:GetWindowImages()
 		let line = getline(i)
 
 		" Check if the line matches one of the valid image formats
-		if line != '' &&
+		if foldclosed(i) <= 0 && line != '' &&
 					\ ( substitute(line, '^.*<< *img path=".\+" height=\d\+ *>>.*$', '', 'i') == '' ||
 					\   substitute(line, '^.*<< *img height=\d\+ path=".\+" *>>.*$', '', 'i') == '' )
+
+			let new_image = {}
+
 			" Parse the data from the line, and add it to the window image list
-			let height = str2nr(substitute(line, '^.*height=\(\d\+\).*$', '\1', 'i'))
-			let path = substitute(line, '^.*path="\(.\+\)".*$', '\1', 'i')
+			let new_image.height = str2nr(substitute(line, '^.*height=\(\d\+\).*$', '\1', 'i'))
+			let new_image.path = substitute(line, '^.*path="\(.\+\)".*$', '\1', 'i')
 
 			let parents = 0
-			for q in split(path, '\zs')
+			for q in split(new_image.path, '\zs')
 				if q == '.'
 					let parents += 1
 					continue
@@ -146,21 +164,24 @@ function! s:GetWindowImages()
 			endfor
 
 			if parents > 0
-				let path = expand('%:p' . repeat(':h', parents)) . path[parents:-1] 
+				let new_image.path = expand('%:p' . repeat(':h', parents)) . new_image.path[parents:-1] 
 			endif
+
+			" Add the buffer and line to the data
+			let new_image.buffer = bufnr()
+			let new_image.line = i
 
 			" Get the screen coords of the image to use as the key
 			let coords = screenpos(0, i, 1)
 			let coord_string = coords.row . ',' . coords.col
-			let image_dict[coord_string] = {'path':expand(path), 'height':height}
+			let image_dict[coord_string] = new_image
 		endif
 	endfor
 
 	return image_dict
 endfunction
 " }}}
-
-" FUNCTION: s:ShowImage(path, x, y, height) {{{1
+" FUNCTION: s:ShowImage(x, y, dict) {{{1
 " Display a single image at a certain terminal position
 function! s:ShowImage(path, x, y, height)
 	let origional_buffer = bufnr()
@@ -188,19 +209,22 @@ function! s:KillImage(terminal)
 	execute a:terminal . 'bdelete!'
 endfunction
 " }}}
+" FUNCTION: s:RemoveFillerLines() {{{1
+function! s:RemoveFillerLines()
+	silent! windo %s/<<imgline>>\n//
+endfunction
+" }}}
+" FUNCTION: s:AddFillerLines(images) {{{1
+function! s:AddFillerLines(images)
+	let origional_buffer = bufnr()
 
-" FUNCTION: s:Union(lists) {{{1
-function! s:Union(lists)
-	let union = []
-
-	for q in a:lists
-		for r in q
-			if index(union, r) == -1
-				call add(union, r)
-			endif
-		endfor
+	for q in keys(a:images)
+		" Open the buffer and add the lines
+		execute a:images[q].buffer . 'buffer'
+		call append(a:images[q].line, repeat(['<<imgline>>'], a:images[q].height - 1))
 	endfor
 
-	return union
+	" Return to the origional buffer
+	execute origional_buffer . 'buffer'
 endfunction
 " }}}

@@ -73,8 +73,9 @@ function! imager#EnableImages()
 
 	" Hide the text for defining images
 	set concealcursor=nivc
-	syntax match imageDefinition /^.*<< *img path=".\+" height=\d\+ *>>.*$/ conceal
-	syntax match imageDefinition /^.*<< *img height=\d\+ path=".\+" *>>.*$/ conceal
+	syntax match imagerDefinition /^.*<< *img path=".\+" height=\d\+ *>>.*$/ conceal
+	syntax match imagerDefinition /^.*<< *img height=\d\+ path=".\+" *>>.*$/ conceal
+	syntax match imagerFiller /^<<imgline>>$/ conceal
 
 	" Generate the autocommand for the specified filetypes
 	augroup imagerRender
@@ -91,8 +92,9 @@ function! imager#DisableImages()
 	let g:imager#enabled = 0
 
 	" Show the text for defining images
-	syntax match imageDefinition /^.*<< *img path=".\+" height=\d\+ *>>.*$/
-	syntax match imageDefinition /^.*<< *img height=\d\+ path=".\+" *>>.*$/
+	syntax match imagerDefinition /^.*<< *img path=".\+" height=\d\+ *>>.*$/
+	syntax match imagerDefinition /^.*<< *img height=\d\+ path=".\+" *>>.*$/
+	syntax match imagerFiller /^<<imgline>>$/ conceal
 
 	augroup imagerRender
 		autocmd!

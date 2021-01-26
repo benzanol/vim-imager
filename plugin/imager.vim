@@ -6,7 +6,7 @@ let g:imager#all_filetypes = 0
 let g:imager#images = {}
 let g:imager#max_id = 1
 let g:imager#timer_delay = 10
-let g:imager#script_path = expand('<sfile>:p:h:h') . '/ueberzug/load-image.sh'
+let g:imager#ueberzug_path = expand('<sfile>:p:h:h') . '/ueberzug/load-image.sh'
 
 command! EnableImages noa call s:EnableImages()
 command! DisableImages noa call s:DisableImages()
@@ -23,10 +23,10 @@ function! s:RenderImages()
 	if !g:imager#enabled || !s:IsWindowChanged()
 		return 0
 	endif
-
+	
 	" Remember the origional window and cursor
 	let origional_winid = win_getid()
-	let origional_cursor = [line('.'), col('.')]
+	norm! mz
 
 	" Generate a new list of images
 	" Image list dictionary format: {'row,col':{path, height, <terminal>}}
@@ -87,7 +87,7 @@ function! s:RenderImages()
 
 	" Return to the origional window and cursor position
 	call win_gotoid(origional_winid)
-	call cursor(origional_cursor)
+	norm! `z
 
 	return 1
 endfunction
@@ -99,9 +99,9 @@ function! s:EnableImages()
 
 	" Hide the text for defining images
 	set concealcursor=nivc
-	syntax match imagerDefinition /^.*<< *img path=".\+" height=\d\+ *>>.*$/ conceal
-	syntax match imagerDefinition /^.*<< *img height=\d\+ path=".\+" *>>.*$/ conceal
-	syntax match imagerFiller /^<<imgline>>$/ conceal
+	syntax match imagerDefinition /^\s*\zs.*<< *img path=".\+" height=\d\+ *>>.*$/ conceal
+	syntax match imagerDefinition /^\s*\zs.*<< *img height=\d\+ path=".\+" *>>.*$/ conceal
+	syntax match imagerFiller /^\s*<<imgline>>$/ conceal
 
 	function! TimerHandler(timer)
 		call s:RenderImages()
@@ -115,9 +115,9 @@ function! s:DisableImages()
 	let g:imager#enabled = 0
 
 	" Show the text for defining images
-	syntax match imagerDefinition /^.*<< *img path=".\+" height=\d\+ *>>.*$/
-	syntax match imagerDefinition /^.*<< *img height=\d\+ path=".\+" *>>.*$/
-	syntax match imagerFiller /^<<imgline>>$/ conceal
+	syntax match imagerDefinition /^\s*\zs.*<< *img path=".\+" height=\d\+ *>>.*$/
+	syntax match imagerDefinition /^\s*\zs.*<< *img height=\d\+ path=".\+" *>>.*$/
+	syntax match imagerFiller /^\s*<<imgline>>$/ conceal
 
 	" Kill all existing images
 	for q in keys(g:imager#images)
@@ -159,6 +159,8 @@ function! s:IsWindowChanged()
 	" Check if the cursor has moved or the file has changed
 	let properties = [{'name':'winid', 'command':'win_getid()'},
 				\ {'name':'file', 'command':'expand("%:p")'},
+				\ {'name':'winid', 'command':'win_getid()'},
+				\ {'name':'buffer', 'command':'bufnr()'},
 				\ {'name':'window_position', 'command':'win_screenpos(winnr())'},
 				\ {'name':'window_size', 'command':'winwidth(0) . "," . winheight(0)'},
 				\ {'name':'window_lines', 'command':'line("w0") . "," . line("w$")'},
@@ -223,15 +225,14 @@ function! s:GetWindowImages()
 				let new_image.path = expand('%:p' . repeat(':h', parents)) . new_image.path[parents:-1] 
 			endif
 
-			" Add the buffer and line to the data
+			" Add the buffer, line, and indent to the data
 			let new_image.buffer = bufnr()
 			let new_image.line = i
+			let new_image.indent = indent(i)
 
 			" Get the screen coords of the image to use as the key
-			let image_index = len(substitute(line, '<<img .*', '', 'i')) + 1
-			let g:img = image_index
-			let coords = screenpos(0, i, image_index)
-			let coord_string = coords.row . ',' . (coords.col - 1)
+			let coords = screenpos(0, i, 1)
+			let coord_string = coords.row . ',' . (coords.col + indent(i) - 1)
 			let image_dict[coord_string] = new_image
 		endif
 	endfor
@@ -248,7 +249,7 @@ function! s:ShowImage(path, x, y, height)
 	let identifier = getpid() . '-' . g:imager#max_id
 	let g:imager#max_id += 1
 
-	let command = printf('%s %s %s %s %s %s', g:imager#script_path, identifier, a:path, a:x, a:y, a:height)
+	let command = printf('%s %s %s %s %s %s', g:imager#ueberzug_path, identifier, a:path, a:x, a:y, a:height)
 	let g:cmd = command
 
 	" Run the command in a terminal in a new tab, then close it
@@ -271,7 +272,7 @@ endfunction
 " }}}
 " FUNCTION: s:RemoveFillerLines() {{{1
 function! s:RemoveFillerLines()
-	silent! windo %s/<<imgline>>\n//
+	silent! windo %s/\s*<<imgline>>\n//
 endfunction
 " }}}
 " FUNCTION: s:AddFillerLines(images) {{{1
@@ -279,9 +280,16 @@ function! s:AddFillerLines(images)
 	let origional_buffer = bufnr()
 
 	for q in keys(a:images)
+		" Set the indent string
+		if &expandtab
+			let indent_string = repeat(' ', a:images[q].indent)
+		else
+			let indent_string = repeat('	', a:images[q].indent / &shiftwidth)
+		endif
+		
 		" Open the buffer and add the lines
 		execute a:images[q].buffer . 'buffer'
-		call append(a:images[q].line, repeat(['<<imgline>>'], a:images[q].height - 1))
+		call append(a:images[q].line, repeat([indent_string . '<<imgline>>'], a:images[q].height - 1))
 	endfor
 
 	" Return to the origional buffer

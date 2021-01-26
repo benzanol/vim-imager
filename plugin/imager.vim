@@ -15,7 +15,7 @@ command! ToggleImages noa call s:ToggleImages()
 
 " Remove filler lines when saving
 autocmd BufWritePre * if g:imager#enabled | call s:RemoveFillerLines() | endif
-autocmd BufWritePost * if g:imager#enabled | call s:AddFillerLines(g:imager#images) | endif
+autocmd BufWritePost * if g:imager#enabled | call s:AddFillerLines() | endif
 autocmd ExitPre * if g:imager#enabled | call s:DisableImages() | endif
 
 " FUNCTION: s:RenderImages() {{{1
@@ -23,7 +23,7 @@ function! s:RenderImages()
 	if !g:imager#enabled || !s:IsWindowChanged()
 		return 0
 	endif
-	
+
 	" Remember the origional window and cursor
 	let origional_winid = win_getid()
 	norm! mz
@@ -34,18 +34,29 @@ function! s:RenderImages()
 	let old = g:imager#images
 
 	" Cycle through the windows and call the function to get its images
-	let g:bufs = []
 	for i in range(1, winnr('$'))
-		call win_gotoid(win_getid(i))
-		let name_split = split(expand('%:t'), '\.')
-		if len(name_split) > 1 && index(g:imager#filetypes, name_split[-1]) > -1
-			let window_images = s:GetWindowImages()
-
-			" Add all of the values from the function to the master list
-			for q in keys(window_images)
-				let new[q] = window_images[q]
-			endfor
+		if !s:IsBufferEnabled(winbufnr(i))
+			continue
 		endif
+
+		call win_gotoid(win_getid(i))
+		let window_images = s:GetWindowImages()
+
+		" Add all of the values from the function to the master dictionary
+		for q in window_images
+			if q.shown
+				let coords = screenpos(i, q.line, 1)
+
+				" If the image is shown, but screenpos is 0, it starts above the buffer
+				if coords.row == 0
+					let coords = screenpos(i, line('w0'), 1)
+					let coords.row -= line('w0') - q.line
+				endif
+
+				let coord_string = coords.row . ',' . string(coords.col + q.indent - 1)
+				let new[coord_string] = q
+			endif
+		endfor
 	endfor
 
 	" Cycle through old images, and remove all inactive ones
@@ -64,10 +75,6 @@ function! s:RenderImages()
 
 	" Only cycle through new windows if the window list has changed at all
 	if any_missing || len(keys(old)) != len(keys(new))
-		" Replace all of the filler lines
-		call s:RemoveFillerLines()
-		call s:AddFillerLines(new)
-
 		" Cycle through the new images, and load all new ones
 		for q in keys(new)
 			" If the new image hasn't been linked to an old one, render it
@@ -101,11 +108,13 @@ function! s:EnableImages()
 	set concealcursor=nivc
 	syntax match imagerDefinition /^\s*\zs.*<< *img path=".\+" height=\d\+ *>>.*$/ conceal
 	syntax match imagerDefinition /^\s*\zs.*<< *img height=\d\+ path=".\+" *>>.*$/ conceal
-	syntax match imagerFiller /^\s*<<imgline>>$/ conceal
+	syntax match imagerFiller /<<imgline>>$/ conceal
 
 	function! TimerHandler(timer)
 		call s:RenderImages()
 	endfunction
+
+	call s:AddFillerLines()
 
 	let g:tiler#timer = timer_start(g:imager#timer_delay, 'TimerHandler', {'repeat':-1})
 endfunction
@@ -117,7 +126,7 @@ function! s:DisableImages()
 	" Show the text for defining images
 	syntax match imagerDefinition /^\s*\zs.*<< *img path=".\+" height=\d\+ *>>.*$/
 	syntax match imagerDefinition /^\s*\zs.*<< *img height=\d\+ path=".\+" *>>.*$/
-	syntax match imagerFiller /^\s*<<imgline>>$/ conceal
+	syntax match imagerFiller /<<imgline>>$/ conceal
 
 	" Kill all existing images
 	for q in keys(g:imager#images)
@@ -143,13 +152,6 @@ function! s:ToggleImages()
 	else
 		call s:EnableImages()
 	endif
-endfunction
-" }}}
-" FUNCTION: s:Write() {{{1
-function! s:Write()
-	call s:RemoveFillerLines()
-	noa write
-	call s:AddFillerLines(g:imager#images)
 endfunction
 " }}}
 
@@ -189,55 +191,85 @@ function! s:IsWindowChanged()
 	return changed
 endfunction
 " }}}
+" FUNCTION: s:IsBufferEnabled(bufnr) {{{1
+function! s:IsBufferEnabled(bufnr)
+	if g:imager#all_filetypes
+		return 1
+	elseif bufname(a:bufnr) == ''
+		return 0
+	endif
+
+	let name = split(bufname(a:bufnr), '/')[-1]
+	let name_split = split(name, '\.')
+
+	if len(name_split) > 1 && index(g:imager#filetypes, name_split[-1]) > -1
+		return 1
+	else
+		return 0
+	endif
+endfunction
+" }}}
 " FUNCTION: s:GetWindowImages() {{{1
 function! s:GetWindowImages()
-	call add(g:bufs, bufnr())
 	" Create a list
-	let image_dict = {}
+	let images = []
+
+	let top_window = screenpos(0, line('w0'), 1).row == 1
+	let bottom_window = screenpos(0, line('w$'), 1).row == &lines
 
 	" Search the displayed lines
 	let first_line = max([1, line('w0')])
 	let last_line = line('w$')
-	for i in range(first_line, last_line)
+	for i in range(1, line('$'))
 		let line = getline(i)
+		if line == ''
+			continue
 
-		" Check if the line matches one of the valid image formats
-		if foldclosed(i) <= 0 && line != '' &&
-					\ ( substitute(line, '^.*<< *img path=".\+" height=\d\+ *>>.*$', '', 'i') == '' ||
-					\   substitute(line, '^.*<< *img height=\d\+ path=".\+" *>>.*$', '', 'i') == '' )
-
+			" Check if the line matches one of the valid image formats
+		elseif substitute(line, '^.*<< *img path=".\+" height=\d\+ *>>.*$', '', '') == '' || substitute(line, '^.*<< *img height=\d\+ path=".\+" *>>.*$', '', '') == ''
 			let new_image = {}
 
 			" Parse the data from the line, and add it to the window image list
 			let new_image.height = str2nr(substitute(line, '^.*height=\(\d\+\).*$', '\1', 'i'))
-			let new_image.path = substitute(line, '^.*path="\(.\+\)".*$', '\1', 'i')
+			let path = substitute(line, '^.*path="\(.\+\)".*$', '\1', 'i')
 
 			let parents = 0
-			for q in split(new_image.path, '\zs')
-				if q == '.'
-					let parents += 1
-					continue
-				endif
-				break
-			endfor
-
-			if parents > 0
-				let new_image.path = expand('%:p' . repeat(':h', parents)) . new_image.path[parents:-1] 
+			if path[0] == '.'
+				for q in split(path, '\zs')
+					if q == '.'
+						let parents += 1
+						continue
+					endif
+					break
+				endfor
+			elseif path[0] != '~' && path[0] != '/'
+				let parents = 1
+				let path = './' . path
 			endif
 
-			" Add the buffer, line, and indent to the data
-			let new_image.buffer = bufnr()
+			if parents > 0
+				let new_image.path = expand('%:p' . repeat(':h', parents)) . path[parents:-1] 
+			endif
+
+			" Add data about the location of the image
 			let new_image.line = i
 			let new_image.indent = indent(i)
 
-			" Get the screen coords of the image to use as the key
-			let coords = screenpos(0, i, 1)
-			let coord_string = coords.row . ',' . (coords.col + indent(i) - 1)
-			let image_dict[coord_string] = new_image
+			" Detect if the image should be displayed
+			let top_line = top_window ? line('w0') - new_image.height : line('w0')
+			let bottom_line = bottom_window ? line('w$') + new_image.height : line('w$')
+			if i > top_line && i < bottom_line && foldclosed(i) <= 0
+				let new_image.shown = 1
+			else
+				let new_image.shown = 0
+			endif
+
+			" Add the image to the image list
+			call add(images, new_image)
 		endif
 	endfor
 
-	return image_dict
+	return images
 endfunction
 " }}}
 " FUNCTION: s:ShowImage(x, y, dict) {{{1
@@ -270,32 +302,40 @@ function! s:KillImage(terminal)
 	execute a:terminal . 'bdelete!'
 endfunction
 " }}}
+" FUNCTION: s:AddFillerLines() {{{1
+function! s:AddFillerLines()
+	" Remember the origional location
+	let origional_buffer = bufnr()
+	norm! mz
+
+	" Cycle through windows, and if it has images run the function
+	for i in range(1, bufnr('$'))
+		if s:IsBufferEnabled(i)
+			execute i . 'buffer'
+			let images = s:GetWindowImages()
+			let added_lines = 0
+
+			for q in images
+				" Set the indent string
+				if &expandtab
+					let indent_string = repeat(' ', q.indent)
+				else
+					let indent_string = repeat('	', q.indent / &shiftwidth)
+				endif
+
+				call append(q.line + added_lines, repeat([indent_string . '<<imgline>>'], q.height))
+				let added_lines += q.height
+			endfor
+		endif
+	endfor
+
+	" Return to the origional location
+	execute origional_buffer . 'buffer'
+	norm! `z
+endfunction
+" }}}
 " FUNCTION: s:RemoveFillerLines() {{{1
 function! s:RemoveFillerLines()
 	silent! windo %s/\s*<<imgline>>\n//
 endfunction
 " }}}
-" FUNCTION: s:AddFillerLines(images) {{{1
-function! s:AddFillerLines(images)
-	let origional_buffer = bufnr()
-
-	for q in keys(a:images)
-		" Set the indent string
-		if &expandtab
-			let indent_string = repeat(' ', a:images[q].indent)
-		else
-			let indent_string = repeat('	', a:images[q].indent / &shiftwidth)
-		endif
-		
-		" Open the buffer and add the lines
-		execute a:images[q].buffer . 'buffer'
-		call append(a:images[q].line, repeat([indent_string . '<<imgline>>'], a:images[q].height - 1))
-	endfor
-
-	" Return to the origional buffer
-	execute origional_buffer . 'buffer'
-endfunction
-" }}}
-
-" Enable on startup
-call s:EnableImages()

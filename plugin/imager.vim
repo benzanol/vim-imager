@@ -228,8 +228,10 @@ function! s:GetWindowImages()
 			let new_image.line = i
 
 			" Get the screen coords of the image to use as the key
-			let coords = screenpos(0, i, 1)
-			let coord_string = coords.row . ',' . coords.col
+			let image_index = len(substitute(line, '<<img .*', '', 'i')) + 1
+			let g:img = image_index
+			let coords = screenpos(0, i, image_index)
+			let coord_string = coords.row . ',' . (coords.col - 1)
 			let image_dict[coord_string] = new_image
 		endif
 	endfor

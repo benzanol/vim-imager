@@ -1,6 +1,7 @@
 " Imager needs the pixel width and height of the font to position the images,
 " so run the function to calculate them if they are not set
 let g:imager#enabled = 0
+let g:imager#used_latex = 0
 let g:imager#filetypes = ['org', 'note']
 let g:imager#all_filetypes = 0
 let g:imager#images = {}
@@ -18,6 +19,7 @@ command! RefreshImages noa call s:RenderImages()
 autocmd BufWritePre * if g:imager#enabled | call s:RemoveFillerLines() | endif
 autocmd BufWritePost * if g:imager#enabled | call s:AddFillerLines() | endif
 autocmd ExitPre * if g:imager#enabled | call s:DisableImages() | endif
+autocmd ExitPre * if g:imager#used_latex | silent! execute "!rm -rf '" . expand('~') . '/.latex_images' . "'" | endif
 
 " FUNCTION: s:RenderImages() {{{1
 function! s:RenderImages()
@@ -318,10 +320,11 @@ function! s:GetWindowImages()
 
 				" For Latex formulas only, create a new image using tex2im
 			elseif s:IsLineLatex(line)
+				let g:imager#used_latex = 1
 				let formula = substitute(line, '^.*formula="\(.\+\)".*$', '\1', 'i')
 
 				" Figure out what would be the directory and image paths
-				let dir_path = substitute(system('echo $HOME'), "\n", '', 'g') . '/.latex_images'
+				let dir_path = expand('~') . '/.latex_images'
 				let image_path = dir_path . '/begin-' . formula . '-end.png'
 
 				" Create the latex directory if it doesn't already exist

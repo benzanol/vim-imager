@@ -86,7 +86,11 @@ function! s:RenderImages()
 
 	" Return to the origional window and cursor position
 	call win_gotoid(origional_winid)
-	norm! `z
+	if line("'z") > 0
+		norm! `z
+	else
+		call cursor(line('$'), 1)
+	endif
 
 	if visual_mode
 		norm! gv
@@ -315,9 +319,15 @@ function! s:GetWindowImages()
 				" For Latex formulas only, create a new image using tex2im
 			elseif s:IsLineLatex(line)
 				let formula = substitute(line, '^.*formula="\(.\+\)".*$', '\1', 'i')
-				
-				silent! execute "!tex2im '" . formula . "'"
-				let new_image.path = "'" . expand("%:p:h") . "/out.png'"
+
+				let image_path = "'" . expand("%:p:h") . "/begin-" . formula . "-end.png'"
+				let tex_path = "'" . expand("%:p:h") . "/begin-" . formula . "-end.tex'"
+
+				if !system('[ -e ' . image_path . ' ] && echo 1')
+					silent! execute "!tex2im '" . formula . "'"
+					silent! execute printf("!mv '%s/out.png' %s", expand('%:p:h'), image_path)
+				endif
+				let new_image.path = image_path
 			endif
 
 			" Parse the data from the line, and add it to the window image list
@@ -397,19 +407,34 @@ function! s:AddFillerLines()
 					let indent_string = repeat('	', q.indent / &shiftwidth)
 				endif
 
-				call append(q.line + added_lines, repeat([indent_string . '<<imgline>>'], q.height))
-				let added_lines += q.height
+				call append(q.line + added_lines, repeat([indent_string . '<<imgline>>'], q.height - 1))
+				let added_lines += q.height - 1
 			endfor
 		endif
 	endfor
 
 	" Return to the origional location
 	execute origional_buffer . 'buffer'
-	norm! `z
+	if line("'z") > 0
+		norm! `z
+	else
+		call cursor(line('$'), 1)
+	endif
 endfunction
 " }}}
 " FUNCTION: s:RemoveFillerLines() {{{1
 function! s:RemoveFillerLines()
+	" Set a mark at the origional cursor position
+	norm! mz
+
+	" Remove all filler lines from all windows
 	silent! windo %s/\s*<<imgline>>\n//
+
+	" Return to the origional cursor position
+	if line("'z") > 0
+		norm! `z
+	else
+		call cursor(line('$'), 1)
+	endif
 endfunction
 " }}}

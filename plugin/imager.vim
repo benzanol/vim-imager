@@ -2,8 +2,8 @@
 " so run the function to calculate them if they are not set
 let g:imager#enabled = 0
 let g:imager#used_latex = 0
-let g:imager#filetypes = ['org', 'note']
-let g:imager#all_filetypes = 0
+let g:imager#filetypes = []
+let g:imager#all_filetypes = 1
 let g:imager#images = {}
 let g:imager#max_id = 1
 let g:imager#timer_delay = 10
@@ -132,6 +132,8 @@ function! s:EnableImages()
 	call s:AddFillerLines()
 
 	let g:tiler#timer = timer_start(g:imager#timer_delay, 'TimerHandler', {'repeat':-1})
+	
+	call s:RenderImages()
 endfunction
 " }}}
 " FUNCTION: s:DisableImages() {{{1
@@ -185,6 +187,7 @@ function! s:IsWindowChanged()
 				\ {'name':'window_lines', 'command':'line("w0") . "," . line("w$")'},
 				\ {'name':'line_rows', 'command':'screenpos(0, line("w0"), 1).row . "," . screenpos(0, line("w$"), 1).row'},
 				\ {'name':'cursor', 'command':'line(".") . "," . col(".")'},
+				\ {'name':'cursor_folded', 'command':'foldclosed(".")'},
 				\ {'name':'getline', 'command':'getline(".")'},
 				\ {'name':'maxline', 'command':'line("$")'}]
 

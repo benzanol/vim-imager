@@ -24,7 +24,11 @@ function! s:RenderImages()
 	if !g:imager#enabled
 		return 0
 	endif
-	
+
+	if mode() == 't'
+		norm! 
+	endif
+
 	if substitute(mode(), 'v', '', 'i') != mode()
 		let visual_mode = 1
 		norm! 
@@ -83,7 +87,7 @@ function! s:RenderImages()
 	" Return to the origional window and cursor position
 	call win_gotoid(origional_winid)
 	norm! `z
-	
+
 	if visual_mode
 		norm! gv
 	endif
@@ -95,7 +99,7 @@ endfunction
 " FUNCTION: s:EnableImages() {{{1
 function! s:EnableImages()
 	let g:imager#enabled = 1
-	
+
 	if !exists('g:terminal_buffer')
 		let origional_buffer = bufnr()
 		enew
@@ -107,7 +111,11 @@ function! s:EnableImages()
 	set concealcursor=nivc
 	syntax match imagerDefinition /^\s*\zs.*<< *img path=".\+" height=\d\+ *>>.*$/ conceal
 	syntax match imagerDefinition /^\s*\zs.*<< *img height=\d\+ path=".\+" *>>.*$/ conceal
+	syntax match latexDefinition /^\s*\zs.*<< *tex formula=".\+" height=\d\+ *>>.*$/ conceal
+	syntax match latexDefinition /^\s*\zs.*<< *tex height=\d\+ formula=".\+" *>>.*$/ conceal
 	syntax match imagerFiller /<<imgline>>$/ conceal
+	setlocal conceallevel=1
+	setlocal concealcursor=nvic
 
 	function! TimerHandler(timer)
 		if s:IsWindowChanged()
@@ -127,6 +135,8 @@ function! s:DisableImages()
 	" Show the text for defining images
 	syntax match imagerDefinition /^\s*\zs.*<< *img path=".\+" height=\d\+ *>>.*$/
 	syntax match imagerDefinition /^\s*\zs.*<< *img height=\d\+ path=".\+" *>>.*$/
+	syntax match latexDefinition /^\s*\zs.*<< *tex formula=".\+" height=\d\+ *>>.*$/
+	syntax match latexDefinition /^\s*\zs.*<< *tex height=\d\+ formula=".\+" *>>.*$/
 	syntax match imagerFiller /<<imgline>>$/ conceal
 
 	" Kill all existing images
@@ -222,66 +232,19 @@ function! s:IsLineImage(string)
 	endif
 endfunction
 " }}}
-" FUNCTION: s:GetWindowImages() {{{1
-function! s:GetWindowImages()
-	" Create a list
-	let images = []
-
-	let top_window = screenpos(0, line('w0'), 1).row == 1
-	let bottom_window = screenpos(0, line('w$'), 1).row == &lines
-
-	" Search the displayed lines
-	let first_line = max([1, line('w0')])
-	let last_line = line('w$')
-	for i in range(1, line('$'))
-		let line = getline(i)
-		" Check if the line matches one of the valid image formats
-		if s:IsLineImage(line)
-			let new_image = {}
-
-			" Parse the data from the line, and add it to the window image list
-			let new_image.height = str2nr(substitute(line, '^.*height=\(\d\+\).*$', '\1', 'i'))
-			let path = substitute(line, '^.*path="\(.\+\)".*$', '\1', 'i')
-
-			let parents = 0
-			if path[0] == '.'
-				for q in split(path, '\zs')
-					if q == '.'
-						let parents += 1
-						continue
-					endif
-					break
-				endfor
-			elseif path[0] != '~' && path[0] != '/'
-				let parents = 1
-				let path = './' . path
-			endif
-
-			if parents > 0
-				let new_image.path = expand('%:p' . repeat(':h', parents)) . path[parents:-1] 
-			endif
-
-			" Add data about the location of the image
-			let new_image.line = i
-			let new_image.indent = indent(i)
-
-			" Detect if the image should be displayed
-			let top_line = top_window ? line('w0') - new_image.height : line('w0')
-			let bottom_line = bottom_window ? line('w$') + new_image.height : line('w$')
-			if i > top_line && i < bottom_line && foldclosed(i) <= 0
-				let new_image.shown = 1
-			else
-				let new_image.shown = 0
-			endif
-
-			" Add the image to the image list
-			call add(images, new_image)
-		endif
-	endfor
-
-	return images
+" FUNCTION: s:IsLineLatex(string) {{{1
+function! s:IsLineLatex(string)
+	if a:string == ''
+		return 0
+	elseif substitute(a:string, '.*<< *tex formula=".\+" height=\d\+ *>>.*$', '', '') == '' ||
+				\ substitute(a:string, '.*<< *tex height=\d\+ formula=".\+" *>>.*$', '', '') == ''
+		return 1
+	else
+		return 0
+	endif
 endfunction
 " }}}
+
 " FUNCTION: s:GenerateImageDict() {{{1
 function! s:GenerateImageDict()
 	if !s:IsBufferEnabled(bufnr())
@@ -307,6 +270,81 @@ function! s:GenerateImageDict()
 	endfor
 endfunction
 " }}}
+" FUNCTION: s:GetWindowImages() {{{1
+function! s:GetWindowImages()
+	" Create a list
+	let images = []
+
+	let top_window = screenpos(0, line('w0'), 1).row == 1
+	let bottom_window = screenpos(0, line('w$'), 1).row == &lines
+
+	" Search the displayed lines
+	let first_line = max([1, line('w0')])
+	let last_line = line('w$')
+	for i in range(1, line('$'))
+		let line = getline(i)
+		" Check if the line matches one of the valid image formats
+		if s:IsLineImage(line) || s:IsLineLatex(line)
+			" Create a new blank dictionary for the image
+			let new_image = {}
+
+			" Parse the image path, only for images
+			if s:IsLineImage(line)
+				let path = substitute(line, '^.*path="\(.\+\)".*$', '\1', 'i')
+
+				" If the path starts with dots, add a new parent directory for each
+				let parents = 0
+				if path != '' && substitute(path, '\.\+\/.*', '', '') == ''
+					for q in split(path, '\zs')
+						if q == '.'
+							let parents += 1
+							continue
+						endif
+						break
+					endfor
+				elseif path[0] != '~' && path[0] != '/'
+					let parents = 1
+					let path = './' . path
+				endif
+
+				" Calculate the directory based on the number of dots there were
+				if parents > 0
+					let new_image.path = expand('%:p' . repeat(':h', parents)) . path[parents:-1] 
+				endif
+
+				" For Latex formulas only, create a new image using tex2im
+			elseif s:IsLineLatex(line)
+				let formula = substitute(line, '^.*formula="\(.\+\)".*$', '\1', 'i')
+				
+				silent! execute "!tex2im '" . formula . "'"
+				let new_image.path = "'" . expand("%:p:h") . "/out.png'"
+			endif
+
+			" Parse the data from the line, and add it to the window image list
+			let new_image.height = str2nr(substitute(line, '^.*height=\(\d\+\).*$', '\1', 'i'))
+
+			" Add data about the location of the image
+			let new_image.line = i
+			let new_image.indent = indent(i)
+
+			" Detect if the image should be displayed
+			let top_line = top_window ? line('w0') - new_image.height : line('w0')
+			let bottom_line = bottom_window ? line('w$') + new_image.height : line('w$')
+			if i > top_line && i < bottom_line && foldclosed(i) <= 0
+				let new_image.shown = 1
+			else
+				let new_image.shown = 0
+			endif
+
+			" Add the image to the image list
+			call add(images, new_image)
+		endif
+	endfor
+
+	return images
+endfunction
+" }}}
+
 " FUNCTION: s:ShowImage(x, y, dict) {{{1
 " Display a single image at a certain terminal position
 function! s:ShowImage(path, x, y, height)
@@ -337,6 +375,7 @@ function! s:KillImage(terminal)
 	execute a:terminal . 'bdelete!'
 endfunction
 " }}}
+
 " FUNCTION: s:AddFillerLines() {{{1
 function! s:AddFillerLines()
 	" Remember the origional location

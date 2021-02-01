@@ -320,12 +320,19 @@ function! s:GetWindowImages()
 			elseif s:IsLineLatex(line)
 				let formula = substitute(line, '^.*formula="\(.\+\)".*$', '\1', 'i')
 
-				let image_path = "'" . expand("%:p:h") . "/begin-" . formula . "-end.png'"
-				let tex_path = "'" . expand("%:p:h") . "/begin-" . formula . "-end.tex'"
+				" Figure out what would be the directory and image paths
+				let dir_path = substitute(system('echo $HOME'), "\n", '', 'g') . '/.latex_images'
+				let image_path = dir_path . '/begin-' . formula . '-end.png'
 
-				if !system('[ -e ' . image_path . ' ] && echo 1')
+				" Create the latex directory if it doesn't already exist
+				if !system('[ -d "' . dir_path . '" ] && echo 1')
+					silent! execute '!mkdir "' . dir_path . '"'
+				endif
+
+				" Create the latex image if it doesn't already exist
+				if !system('[ -e ' . "'" . image_path . "'" . ' ] && echo 1')
 					silent! execute "!tex2im '" . formula . "'"
-					silent! execute printf("!mv '%s/out.png' %s", expand('%:p:h'), image_path)
+					silent! execute printf("!mv '%s/out.png' '%s'", getcwd(), image_path)
 				endif
 				let new_image.path = image_path
 			endif
@@ -364,7 +371,7 @@ function! s:ShowImage(path, x, y, height)
 	let identifier = getpid() . '-' . g:imager#max_id
 	let g:imager#max_id += 1
 
-	let command = printf('%s %s %s %s %s %s', g:imager#ueberzug_path, identifier, a:path, a:x, a:y, a:height)
+	let command = printf("%s %s '%s' %s %s %s", g:imager#ueberzug_path, identifier, a:path, a:x, a:y, a:height)
 	let g:cmd = command
 
 	" Run the command in a terminal in a new tab, then close it

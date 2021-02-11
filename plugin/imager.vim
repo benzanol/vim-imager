@@ -2,12 +2,14 @@
 " so run the function to calculate them if they are not set
 let g:imager#enabled = 0
 let g:imager#used_latex = 0
-let g:imager#filetypes = []
+let g:imager#filetypes = ['note']
 let g:imager#all_filetypes = 1
 let g:imager#images = {}
 let g:imager#max_id = 1
 let g:imager#timer_delay = 10
 let g:imager#ueberzug_path = expand('<sfile>:p:h:h') . '/ueberzug/load-image.sh'
+let g:imager#latex_background = 'white'
+let g:imager#latex_foreground = 'black'
 
 command! EnableImages noa call s:EnableImages()
 command! DisableImages noa call s:DisableImages()
@@ -134,6 +136,10 @@ function! s:EnableImages()
 	let g:tiler#timer = timer_start(g:imager#timer_delay, 'TimerHandler', {'repeat':-1})
 	
 	call s:RenderImages()
+	
+	" Return that images are now enabled
+	redraw!
+	echo 'Imager has now been enabled'
 endfunction
 " }}}
 " FUNCTION: s:DisableImages() {{{1
@@ -154,6 +160,10 @@ function! s:DisableImages()
 
 	let g:imager#images = {}
 	call s:RemoveFillerLines()
+	
+	" Return that images are now disabled
+	redraw!
+	echo 'Imager has now been disabled'
 endfunction
 " }}}
 " FUNCTION: s:ReloadImages() {{{1
@@ -186,9 +196,6 @@ function! s:IsWindowChanged()
 				\ {'name':'window_size', 'command':'winwidth(0) . "," . winheight(0)'},
 				\ {'name':'window_lines', 'command':'line("w0") . "," . line("w$")'},
 				\ {'name':'line_rows', 'command':'screenpos(0, line("w0"), 1).row . "," . screenpos(0, line("w$"), 1).row'},
-				\ {'name':'cursor', 'command':'line(".") . "," . col(".")'},
-				\ {'name':'cursor_folded', 'command':'foldclosed(".")'},
-				\ {'name':'getline', 'command':'getline(".")'},
 				\ {'name':'maxline', 'command':'line("$")'}]
 
 	" Create a new list of properties
@@ -337,7 +344,8 @@ function! s:GetWindowImages()
 
 				" Create the latex image if it doesn't already exist
 				if !system('[ -e ' . "'" . image_path . "'" . ' ] && echo 1')
-					silent! execute "!tex2im '" . formula . "'"
+					let g:num = formula
+					silent! execute printf("!tex2im -b %s -t %s '%s'", g:imager#latex_background, g:imager#latex_foreground, formula)
 					silent! execute printf("!mv '%s/out.png' '%s'", getcwd(), image_path)
 				endif
 				let new_image.path = image_path
@@ -407,7 +415,7 @@ function! s:AddFillerLines()
 
 	" Cycle through windows, and if it has images run the function
 	for i in range(1, bufnr('$'))
-		if s:IsBufferEnabled(i)
+		if bufexists(i) && s:IsBufferEnabled(i)
 			execute i . 'buffer'
 			let images = s:GetWindowImages()
 			let added_lines = 0

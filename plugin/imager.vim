@@ -1,16 +1,36 @@
-" Imager needs the pixel width and height of the font to position the images,
-" so run the function to calculate them if they are not set
-let g:imager#enabled = 0
-let g:imager#used_latex = 0
+" Set default values for user modifiable settings {{{1
+" Filetypes to search for images in
 let g:imager#filetypes = ['note']
-let g:imager#all_filetypes = 1
-let g:imager#images = {}
-let g:imager#max_id = 1
-let g:imager#timer_delay = 10
-let g:imager#ueberzug_path = expand('<sfile>:p:h:h') . '/ueberzug/load-image.sh'
+
+" Whether or not to search for images in all filetypes
+let g:imager#all_filetypes = 0
+
+" Set the colors of latex expressions
 let g:imager#latex_background = 'white'
 let g:imager#latex_foreground = 'black'
+" }}}
+" Set starting values for global variables {{{1
+" Whether or not to show images in place of the image keys
+let g:imager#enabled = 0
 
+" The list of currently active images
+let g:imager#images = {}
+
+" Increment each time an image is displayed, so each Uberzug session is given
+" a unique id
+let g:imager#max_id = 1
+
+" How often to check whether any images have been changed
+let g:imager#timer_delay = 10
+
+" The path to the ueberzug script
+let g:imager#ueberzug_path = expand('<sfile>:p:h:h') . '/ueberzug/load-image.sh'
+
+" Whether the vim session used any latex expressions, so that it knows if it
+" needs to delete the ~/.latex_images directory
+let g:imager#used_latex = 0
+" }}}
+" Initialize commands and autocommands {{{1
 command! EnableImages noa call s:EnableImages()
 command! DisableImages noa call s:DisableImages()
 command! ReloadImages noa call s:ReloadImages()
@@ -22,9 +42,9 @@ autocmd BufWritePre * if g:imager#enabled | call s:RemoveFillerLines() | endif
 autocmd BufWritePost * if g:imager#enabled | call s:AddFillerLines() | endif
 autocmd ExitPre * if g:imager#enabled | call s:DisableImages() | endif
 autocmd ExitPre * if g:imager#used_latex | silent! execute "!rm -rf '" . expand('~') . '/.latex_images' . "'" | endif
+" }}}
 
-" FUNCTION: s:RenderImages() {{{1
-function! s:RenderImages()
+function! s:RenderImages() " {{{1
 	if !g:imager#enabled
 		return 0
 	endif
@@ -104,8 +124,7 @@ function! s:RenderImages()
 endfunction
 " }}}
 
-" FUNCTION: s:EnableImages() {{{1
-function! s:EnableImages()
+function! s:EnableImages() " {{{1
 	let g:imager#enabled = 1
 
 	if !exists('g:terminal_buffer')
@@ -142,8 +161,7 @@ function! s:EnableImages()
 	echo 'Imager has now been enabled'
 endfunction
 " }}}
-" FUNCTION: s:DisableImages() {{{1
-function! s:DisableImages()
+function! s:DisableImages() " {{{1
 	let g:imager#enabled = 0
 
 	" Show the text for defining images
@@ -166,16 +184,14 @@ function! s:DisableImages()
 	echo 'Imager has now been disabled'
 endfunction
 " }}}
-" FUNCTION: s:ReloadImages() {{{1
-function! s:ReloadImages()
+function! s:ReloadImages() " {{{1
 	if g:imager#enabled
 		call s:DisableImages()
 	endif
 	call s:EnableImages()
 endfunction
 " }}}
-" FUNCTION: s:ToggleImages() {{{1
-function! s:ToggleImages()
+function! s:ToggleImages() " {{{1
 	if g:imager#enabled
 		call s:DisableImages()
 	else
@@ -218,8 +234,7 @@ function! s:IsWindowChanged()
 	return changed
 endfunction
 " }}}
-" FUNCTION: s:IsBufferEnabled(bufnr) {{{1
-function! s:IsBufferEnabled(bufnr)
+function! s:IsBufferEnabled(bufnr) " {{{1
 	if g:imager#all_filetypes
 		return 1
 	elseif bufname(a:bufnr) == ''
@@ -236,8 +251,7 @@ function! s:IsBufferEnabled(bufnr)
 	endif
 endfunction
 " }}}
-" FUNCTION: s:IsLineImage(string) {{{1
-function! s:IsLineImage(string)
+function! s:IsLineImage(string) " {{{1
 	if a:string == ''
 		return 0
 	elseif substitute(a:string, '.*<< *img path=".\+" height=\d\+ *>>.*$', '', '') == '' ||
@@ -248,8 +262,7 @@ function! s:IsLineImage(string)
 	endif
 endfunction
 " }}}
-" FUNCTION: s:IsLineLatex(string) {{{1
-function! s:IsLineLatex(string)
+function! s:IsLineLatex(string) " {{{1
 	if a:string == ''
 		return 0
 	elseif substitute(a:string, '.*<< *tex formula=".\+" height=\d\+ *>>.*$', '', '') == '' ||
@@ -261,8 +274,7 @@ function! s:IsLineLatex(string)
 endfunction
 " }}}
 
-" FUNCTION: s:GenerateImageDict() {{{1
-function! s:GenerateImageDict()
+function! s:GenerateImageDict() " {{{1
 	if !s:IsBufferEnabled(bufnr())
 		return 0
 	endif
@@ -286,8 +298,7 @@ function! s:GenerateImageDict()
 	endfor
 endfunction
 " }}}
-" FUNCTION: s:GetWindowImages() {{{1
-function! s:GetWindowImages()
+function! s:GetWindowImages() " {{{1
 	" Create a list
 	let images = []
 
@@ -401,14 +412,12 @@ function! s:ShowImage(path, x, y, height)
 	return terminal_buffer
 endfunction
 " }}}
-" FUNCTION: s:KillImage(terminal) {{{1
-function! s:KillImage(terminal)
+function! s:KillImage(terminal) " {{{1
 	execute a:terminal . 'bdelete!'
 endfunction
 " }}}
 
-" FUNCTION: s:AddFillerLines() {{{1
-function! s:AddFillerLines()
+function! s:AddFillerLines() " {{{1
 	" Remember the origional location
 	let origional_buffer = bufnr()
 	norm! mz
@@ -443,8 +452,7 @@ function! s:AddFillerLines()
 	endif
 endfunction
 " }}}
-" FUNCTION: s:RemoveFillerLines() {{{1
-function! s:RemoveFillerLines()
+function! s:RemoveFillerLines() " {{{1
 	" Set a mark at the origional cursor position
 	norm! mz
 

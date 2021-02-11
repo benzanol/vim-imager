@@ -8,6 +8,10 @@ let g:imager#all_filetypes = 0
 " Set the colors of latex expressions
 let g:imager#latex_background = 'white'
 let g:imager#latex_foreground = 'black'
+
+" Whether or not to automatically add and remove filler lines under the image
+" when displaying it (has issues)
+let g:imager#automatic_filler = 0
 " }}}
 " Set starting values for global variables {{{1
 " Whether or not to show images in place of the image keys
@@ -418,6 +422,11 @@ endfunction
 " }}}
 
 function! s:AddFillerLines() " {{{1
+	" If adding automatic filler lines is disabled, return before doing anything
+	if !g:imager#automatic_filler
+		return
+	endif
+	
 	" Remember the origional location
 	let origional_buffer = bufnr()
 	norm! mz
@@ -453,6 +462,11 @@ function! s:AddFillerLines() " {{{1
 endfunction
 " }}}
 function! s:RemoveFillerLines() " {{{1
+	" If adding automatic filler lines is disabled, return before doing anything
+	if !g:imager#automatic_filler
+		return
+	endif
+	
 	" Set a mark at the origional cursor position
 	norm! mz
 

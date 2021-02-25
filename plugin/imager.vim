@@ -1,13 +1,13 @@
 " Set default values for user modifiable settings {{{1
 " Filetypes to search for images in
-let g:imager#filetypes = ['note']
+let g:imager#filetypes = ['noteview']
 
 " Whether or not to search for images in all filetypes
 let g:imager#all_filetypes = 0
 
 " Set the colors of latex expressions
-let g:imager#latex_background = 'white'
-let g:imager#latex_foreground = 'black'
+let g:imager#latex_foreground = 'white'
+let g:imager#latex_background = '23272E'
 
 " Whether or not to automatically add and remove filler lines under the image
 " when displaying it (has issues)
@@ -131,23 +131,19 @@ endfunction
 function! s:EnableImages() " {{{1
 	let g:imager#enabled = 1
 
-	if !exists('g:terminal_buffer')
-		let origional_buffer = bufnr()
-		enew
-		let g:terminal_buffer = bufnr()
-		execute origional_buffer . 'buffer'
+	" Create a temporary directory for latex images if it doesnt exist
+	if !system('[ -d "/tmp/latex_images" ] && echo 1')
+		silent! execute '!mkdir "/tmp/latex_images"'
 	endif
 
 	" Hide the text for defining images
-	set concealcursor=nivc
-	syntax match imagerDefinition /^\s*\zs.*<< *img path=".\+" height=\d\+ *>>.*$/ conceal
-	syntax match imagerDefinition /^\s*\zs.*<< *img height=\d\+ path=".\+" *>>.*$/ conceal
-	syntax match latexDefinition /^\s*\zs.*<< *tex formula=".\+" height=\d\+ *>>.*$/ conceal
-	syntax match latexDefinition /^\s*\zs.*<< *tex height=\d\+ formula=".\+" *>>.*$/ conceal
-	syntax match imagerFiller /<<imgline>>$/ conceal
+	syntax match imagerDefinition /^\s*.*<<img path=".\+" height=\d\+>>.*$/ conceal
+	syntax match latexDefinition /^\s*.*<<tex formula=".\+" height=\d\+>>.*$/ conceal
+	syntax match imagerFiller /^\s*<<imgline>>$/ conceal
 	setlocal conceallevel=1
 	setlocal concealcursor=nvic
 
+	" Function for constantly checking whether to refresh images
 	function! TimerHandler(timer)
 		if s:IsWindowChanged()
 			call s:RenderImages()
@@ -157,9 +153,9 @@ function! s:EnableImages() " {{{1
 	call s:AddFillerLines()
 
 	let g:tiler#timer = timer_start(g:imager#timer_delay, 'TimerHandler', {'repeat':-1})
-	
+
 	call s:RenderImages()
-	
+
 	" Return that images are now enabled
 	redraw!
 	echo 'Imager has now been enabled'
@@ -169,11 +165,9 @@ function! s:DisableImages() " {{{1
 	let g:imager#enabled = 0
 
 	" Show the text for defining images
-	syntax match imagerDefinition /^\s*\zs.*<< *img path=".\+" height=\d\+ *>>.*$/
-	syntax match imagerDefinition /^\s*\zs.*<< *img height=\d\+ path=".\+" *>>.*$/
-	syntax match latexDefinition /^\s*\zs.*<< *tex formula=".\+" height=\d\+ *>>.*$/
-	syntax match latexDefinition /^\s*\zs.*<< *tex height=\d\+ formula=".\+" *>>.*$/
-	syntax match imagerFiller /<<imgline>>$/ conceal
+	syntax match imagerDefinition /^\s*.*<<img path=".\+" height=\d\+>>.*$/
+	syntax match latexDefinition /^\s*.*<<tex formula=".\+" height=\d\+>>.*$/
+	syntax match imagerFiller /^\s*<<imgline>>$/
 
 	" Kill all existing images
 	for q in keys(g:imager#images)
@@ -182,7 +176,7 @@ function! s:DisableImages() " {{{1
 
 	let g:imager#images = {}
 	call s:RemoveFillerLines()
-	
+
 	" Return that images are now disabled
 	redraw!
 	echo 'Imager has now been disabled'
@@ -204,9 +198,7 @@ function! s:ToggleImages() " {{{1
 endfunction
 " }}}
 
-" FUNCTION: s:IsWindowChanged() {{{1
-" Detect if there are changes to the current window
-function! s:IsWindowChanged()
+function! s:IsWindowChanged() " {{{1
 	" Check if the cursor has moved or the file has changed
 	let properties = [{'name':'winid', 'command':'win_getid()'},
 				\ {'name':'file', 'command':'expand("%:p")'},
@@ -311,16 +303,21 @@ function! s:GetWindowImages() " {{{1
 
 	" Search the displayed lines
 	let first_line = max([1, line('w0')])
-	let last_line = line('w$')
 	for i in range(1, line('$'))
 		let line = getline(i)
+		let is_image = s:IsLineImage(line)
+		let is_latex = s:IsLineLatex(line)
+		if i == 14
+			let g:im = is_image
+			let g:la = is_latex
+		endif
 		" Check if the line matches one of the valid image formats
-		if s:IsLineImage(line) || s:IsLineLatex(line)
+		if is_image || is_latex
 			" Create a new blank dictionary for the image
 			let new_image = {}
 
 			" Parse the image path, only for images
-			if s:IsLineImage(line)
+			if is_image
 				let path = substitute(line, '^.*path="\(.\+\)".*$', '\1', 'i')
 
 				" If the path starts with dots, add a new parent directory for each
@@ -344,23 +341,30 @@ function! s:GetWindowImages() " {{{1
 				endif
 
 				" For Latex formulas only, create a new image using tex2im
-			elseif s:IsLineLatex(line)
+			elseif is_latex
 				let g:imager#used_latex = 1
 				let formula = substitute(line, '^.*formula="\(.\+\)".*$', '\1', 'i')
+				let hash = split(system(printf('echo -n "%s" | md5sum', formula)), ' ')[0]
 
 				" Figure out what would be the directory and image paths
-				let dir_path = expand('~') . '/.latex_images'
-				let image_path = dir_path . '/begin-' . formula . '-end.png'
-
-				" Create the latex directory if it doesn't already exist
-				if !system('[ -d "' . dir_path . '" ] && echo 1')
-					silent! execute '!mkdir "' . dir_path . '"'
-				endif
+				let dir_path = '/tmp/latex_images'
+				let image_path = dir_path . '/' . hash . '.png'
 
 				" Create the latex image if it doesn't already exist
 				if !system('[ -e ' . "'" . image_path . "'" . ' ] && echo 1')
-					let g:num = formula
-					silent! execute printf("!tex2im -b %s -t %s '%s'", g:imager#latex_background, g:imager#latex_foreground, formula)
+					" If the foreground or background colors are a hex value, add HTML:
+					" before them to make the hex code valid
+					let foreground = g:imager#latex_foreground
+					let background = g:imager#latex_background
+					if substitute(g:imager#latex_foreground, '\x\{6}', '', '') == ''
+						let foreground = 'HTML:' . foreground
+					endif
+					if substitute(g:imager#latex_background, '\x\{6}', '', '') == ''
+						let background = 'HTML:' . background
+					endif
+
+					" Convert the latex expression into an image
+					silent! execute printf("!tex2im -b %s -t %s '%s'", background, foreground, formula)
 					silent! execute printf("!mv '%s/out.png' '%s'", getcwd(), image_path)
 				endif
 				let new_image.path = image_path
@@ -376,7 +380,7 @@ function! s:GetWindowImages() " {{{1
 			" Detect if the image should be displayed
 			let top_line = top_window ? line('w0') - new_image.height : line('w0')
 			let bottom_line = bottom_window ? line('w$') + new_image.height : line('w$')
-			if i > top_line && i < bottom_line && foldclosed(i) <= 0
+			if i >= top_line && i <= bottom_line && foldclosed(i) <= 0
 				let new_image.shown = 1
 			else
 				let new_image.shown = 0
@@ -391,9 +395,8 @@ function! s:GetWindowImages() " {{{1
 endfunction
 " }}}
 
-" FUNCTION: s:ShowImage(x, y, dict) {{{1
-" Display a single image at a certain terminal position
-function! s:ShowImage(path, x, y, height)
+function! s:ShowImage(path, x, y, height) " {{{
+	" Display a single image at a certain terminal position
 	let origional_winid = win_getid()
 
 	" Format the command to execute
@@ -401,7 +404,6 @@ function! s:ShowImage(path, x, y, height)
 	let g:imager#max_id += 1
 
 	let command = printf("%s %s '%s' %s %s %s", g:imager#ueberzug_path, identifier, a:path, a:x, a:y, a:height)
-	let g:cmd = command
 
 	" Run the command in a terminal in a new tab, then close it
 	new
@@ -426,7 +428,7 @@ function! s:AddFillerLines() " {{{1
 	if !g:imager#automatic_filler
 		return
 	endif
-	
+
 	" Remember the origional location
 	let origional_buffer = bufnr()
 	norm! mz
@@ -466,7 +468,7 @@ function! s:RemoveFillerLines() " {{{1
 	if !g:imager#automatic_filler
 		return
 	endif
-	
+
 	" Set a mark at the origional cursor position
 	norm! mz
 

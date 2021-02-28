@@ -288,7 +288,7 @@ function! s:GenerateImageDict() " {{{1
 				let coords.row -= line('w0') - q.line
 			endif
 
-			let coord_string = coords.row . ',' . string(coords.col + q.indent - 1)
+			let coord_string = coords.row . ',' . string(coords.col + q.indent)
 			let g:imager#images[coord_string] = q
 		endif
 	endfor

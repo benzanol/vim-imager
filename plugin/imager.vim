@@ -47,6 +47,10 @@ autocmd BufWritePost * if g:imager#enabled | call s:AddFillerLines() | endif
 autocmd ExitPre * if g:imager#enabled | call s:DisableImages() | endif
 autocmd ExitPre * if g:imager#used_latex | silent! execute "!rm -rf '" . expand('~') . '/.latex_images' . "'" | endif
 " }}}
+" Initialize global regular expressions {{{1
+let s:image_regexp = '.*<< *img path="\(.\+\)" height=\(\d\+\) *>>.*$'
+let s:latex_regexp = '.*<< *tex formula="\(.\+\)" height=\(\d\+\) *>>.*$'
+" }}}
 
 function! s:RenderImages() " {{{1
 	if !g:imager#enabled
@@ -247,28 +251,6 @@ function! s:IsBufferEnabled(bufnr) " {{{1
 	endif
 endfunction
 " }}}
-function! s:IsLineImage(string) " {{{1
-	if a:string == ''
-		return 0
-	elseif substitute(a:string, '.*<< *img path=".\+" height=\d\+ *>>.*$', '', '') == '' ||
-				\ substitute(a:string, '.*<< *img height=\d\+ path=".\+" *>>.*$', '', '') == ''
-		return 1
-	else
-		return 0
-	endif
-endfunction
-" }}}
-function! s:IsLineLatex(string) " {{{1
-	if a:string == ''
-		return 0
-	elseif substitute(a:string, '.*<< *tex formula=".\+" height=\d\+ *>>.*$', '', '') == '' ||
-				\ substitute(a:string, '.*<< *tex height=\d\+ formula=".\+" *>>.*$', '', '') == ''
-		return 1
-	else
-		return 0
-	endif
-endfunction
-" }}}
 
 function! s:GenerateImageDict() " {{{1
 	if !s:IsBufferEnabled(bufnr())
@@ -305,20 +287,21 @@ function! s:GetWindowImages() " {{{1
 	let first_line = max([1, line('w0')])
 	for i in range(1, line('$'))
 		let line = getline(i)
-		let is_image = s:IsLineImage(line)
-		let is_latex = s:IsLineLatex(line)
-		if i == 14
-			let g:im = is_image
-			let g:la = is_latex
-		endif
+
 		" Check if the line matches one of the valid image formats
+		let image_attributes = split(substitute(line, s:image_regexp, '\1\n\2', ''), "\n")
+		let latex_attributes = split(substitute(line, s:latex_regexp, '\1\n\2', ''), "\n")
+		let is_image = len(image_attributes) > 1
+		let is_latex = len(latex_attributes) > 1
+
 		if is_image || is_latex
+		let g:la = latex_attributes
 			" Create a new blank dictionary for the image
 			let new_image = {}
 
 			" Parse the image path, only for images
 			if is_image
-				let path = substitute(line, '^.*path="\(.\+\)".*$', '\1', 'i')
+				let path = latex_attributes[0]
 
 				" If the path starts with dots, add a new parent directory for each
 				let parents = 0
@@ -343,7 +326,7 @@ function! s:GetWindowImages() " {{{1
 				" For Latex formulas only, create a new image using tex2im
 			elseif is_latex
 				let g:imager#used_latex = 1
-				let formula = substitute(line, '^.*formula="\(.\+\)".*$', '\1', 'i')
+				let formula = latex_attributes[0]
 				let hash = split(system(printf('echo -n "%s" | md5sum', formula)), ' ')[0]
 
 				" Figure out what would be the directory and image paths
@@ -371,7 +354,7 @@ function! s:GetWindowImages() " {{{1
 			endif
 
 			" Parse the data from the line, and add it to the window image list
-			let new_image.height = str2nr(substitute(line, '^.*height=\(\d\+\).*$', '\1', 'i'))
+			let new_image.height = is_image ? image_attributes[1] : latex_attributes[1]
 
 			" Add data about the location of the image
 			let new_image.line = i

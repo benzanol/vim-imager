@@ -29,10 +29,6 @@ let g:imager#timer_delay = 10
 
 " The path to the ueberzug script
 let g:imager#ueberzug_path = expand('<sfile>:p:h:h') . '/ueberzug/load-image.sh'
-
-" Whether the vim session used any latex expressions, so that it knows if it
-" needs to delete the ~/.latex_images directory
-let g:imager#used_latex = 0
 " }}}
 " Initialize commands and autocommands {{{1
 command! EnableImages noa call s:EnableImages()
@@ -48,8 +44,8 @@ autocmd ExitPre * if g:imager#enabled | call s:DisableImages() | endif
 autocmd ExitPre * if g:imager#used_latex | silent! execute "!rm -rf '" . expand('~') . '/.latex_images' . "'" | endif
 " }}}
 " Initialize global regular expressions {{{1
-let s:image_regexp = '.*<< *img path="\(.\+\)" height=\(\d\+\) *>>.*$'
-let s:latex_regexp = '.*<< *tex formula="\(.\+\)" height=\(\d\+\) *>>.*$'
+let s:image_regexp = '.*<< *img path="\([^"]\+\)" height=\(\d\+\) *>>.*$'
+let s:latex_regexp = '.*<< *tex formula="\([^"]\+\)" height=\(\d\+\)\( plugins="\([^"]\+\)"\)\? *>>.*$'
 " }}}
 
 function! s:RenderImages() " {{{1
@@ -290,12 +286,11 @@ function! s:GetWindowImages() " {{{1
 
 		" Check if the line matches one of the valid image formats
 		let image_attributes = split(substitute(line, s:image_regexp, '\1\n\2', ''), "\n")
-		let latex_attributes = split(substitute(line, s:latex_regexp, '\1\n\2', ''), "\n")
+		let latex_attributes = split(substitute(line, s:latex_regexp, '\1\n\2\n\3', ''), "\n")
 		let is_image = len(image_attributes) > 1
 		let is_latex = len(latex_attributes) > 1
 
 		if is_image || is_latex
-		let g:la = latex_attributes
 			" Create a new blank dictionary for the image
 			let new_image = {}
 
@@ -325,9 +320,14 @@ function! s:GetWindowImages() " {{{1
 
 				" For Latex formulas only, create a new image using tex2im
 			elseif is_latex
-				let g:imager#used_latex = 1
 				let formula = latex_attributes[0]
-				let hash = split(system(printf('echo -n "%s" | md5sum', formula)), ' ')[0]
+				if len(latex_attributes) > 2
+					let latex_package = split(latex_attributes[2], ',')
+					let snippet_string = join(latex_packages, ',') . ':' . formula
+				else
+					let snippet_string = formula
+				endif
+				let hash = split(system(printf('echo -n "%s" | md5sum', snippet_string)), ' ')[0]
 
 				" Figure out what would be the directory and image paths
 				let dir_path = '/tmp/latex_images'
@@ -346,8 +346,17 @@ function! s:GetWindowImages() " {{{1
 						let background = 'HTML:' . background
 					endif
 
+					" Generate the preamble text to use certain plugins
+					if exists('latex_packages')
+						let preamble = '-x \usepackage{' .
+									\ join(latex_packages, "}\\usepackage{") .
+									\ '} '
+					else
+						let preamble = ''
+					endif
+
 					" Convert the latex expression into an image
-					silent! execute printf("!tex2im -b %s -t %s '%s'", background, foreground, formula)
+					silent! execute printf("!tex2im %s-b %s -t %s '%s'", preamble, background, foreground, formula)
 					silent! execute printf("!mv '%s/out.png' '%s'", getcwd(), image_path)
 				endif
 				let new_image.path = image_path

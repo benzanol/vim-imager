@@ -29,6 +29,9 @@ let g:imager#timer_delay = 10
 
 " The path to the ueberzug script
 let g:imager#ueberzug_path = expand('<sfile>:p:h:h') . '/ueberzug/load-image.sh'
+
+" Start out not having used latex
+let g:imager#used_latex = 0
 " }}}
 " Initialize commands and autocommands {{{1
 command! EnableImages noa call s:EnableImages()
@@ -296,7 +299,7 @@ function! s:GetWindowImages() " {{{1
 
 			" Parse the image path, only for images
 			if is_image
-				let path = latex_attributes[0]
+				let path = image_attributes[0]
 
 				" If the path starts with dots, add a new parent directory for each
 				let parents = 0

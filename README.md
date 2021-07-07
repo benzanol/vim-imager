@@ -4,7 +4,8 @@ This plugin will only work in terminal vim/neovim and while running X11.
 
 ## Installation
 
-To install Üeberzug, run the following command in the terminal.\
+### Installing Ueberzug
+Make sure that python3 is installed, and run the following command:\
 `pip3 install ueberzug`
 
 ### Install with Vim Plug

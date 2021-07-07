@@ -1,10 +1,13 @@
 # Vim Imager
-Display real images (not just ascii) inside of vim using Üeberzug
+Display real images (not just ascii) inside of vim using Überzug
 This plugin will only work in terminal vim/neovim and while running X11.
+
+For more information about Überzug check out the github page:\
+[https://github.com/seebye/ueberzug](https://github.com/seebye/ueberzug)
 
 ## Installation
 
-### Installing Ueberzug
+### Installing Überzug
 Make sure that python3 is installed, and run the following command:\
 `pip3 install ueberzug`
 

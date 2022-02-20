@@ -67,8 +67,8 @@ function! s:RenderImages() " {{{1
 		let visual_mode = 0
 	endif
 
-	" Remember the origional window and cursor
-	let origional_winid = win_getid()
+	" Remember the original window and cursor
+	let original_winid = win_getid()
 	norm! mz
 
 	" Generate a new list of images
@@ -81,10 +81,12 @@ function! s:RenderImages() " {{{1
 	let new = g:imager#images
 
 	" Cycle through old images, and remove all inactive ones
+    let g:new = new
+    let g:old = old
 	let any_missing = 0
 	for q in keys(old)
 		" Migrate the terminal to the new image if there is an identical old one
-		if has_key(new, q) && new[q].path == old[q].path && new[q].height == old[q].height
+		if has_key(new, q) && (new[q].path == old[q].path) && (new[q].height == old[q].height)
 			let new[q].terminal = old[q].terminal
 
 		else
@@ -115,8 +117,8 @@ function! s:RenderImages() " {{{1
 	" Set the global image list to the newly created one
 	let g:imager#images = new
 
-	" Return to the origional window and cursor position
-	call win_gotoid(origional_winid)
+	" Return to the original window and cursor position
+	call win_gotoid(original_winid)
 	if line("'z") > 0
 		norm! `z
 	else
@@ -155,7 +157,7 @@ function! s:EnableImages() " {{{1
 
 	call s:AddFillerLines()
 
-	let g:tiler#timer = timer_start(g:imager#timer_delay, 'TimerHandler', {'repeat':-1})
+	let g:imager#timer = timer_start(g:imager#timer_delay, 'TimerHandler', {'repeat':-1})
 
 	call s:RenderImages()
 
@@ -318,7 +320,9 @@ function! s:GetWindowImages() " {{{1
 
 				" Calculate the directory based on the number of dots there were
 				if parents > 0
-					let new_image.path = expand('%:p' . repeat(':h', parents)) . path[parents:-1] 
+					let new_image.path = expand('%:p' . repeat(':h', parents)) . path[parents:-1]
+                else
+                    let new_image.path = path
 				endif
 
 				" For Latex formulas only, create a new image using tex2im
@@ -392,13 +396,12 @@ endfunction
 
 function! s:ShowImage(path, x, y, height) " {{{
 	" Display a single image at a certain terminal position
-	let origional_winid = win_getid()
+	let original_winid = win_getid()
 
 	" Format the command to execute
-	let identifier = getpid() . '-' . g:imager#max_id
 	let g:imager#max_id += 1
 
-	let command = printf("%s %s '%s' %s %s %s", g:imager#ueberzug_path, identifier, a:path, a:x, a:y, a:height)
+	let command = printf("bash %s '%s' %s %s %s", g:imager#ueberzug_path, a:path, a:x, a:y, a:height)
 
 	" Run the command in a terminal in a new tab, then close it
 	new
@@ -407,8 +410,8 @@ function! s:ShowImage(path, x, y, height) " {{{
 	let terminal_buffer = bufnr()
 	close!
 
-	" Return to the origional buffer
-	call win_gotoid(origional_winid)
+	" Return to the original buffer
+	call win_gotoid(original_winid)
 
 	return terminal_buffer
 endfunction
@@ -424,8 +427,8 @@ function! s:AddFillerLines() " {{{1
 		return
 	endif
 
-	" Remember the origional location
-	let origional_buffer = bufnr()
+	" Remember the original location
+	let original_buffer = bufnr()
 	norm! mz
 
 	" Cycle through windows, and if it has images run the function
@@ -449,8 +452,8 @@ function! s:AddFillerLines() " {{{1
 		endif
 	endfor
 
-	" Return to the origional location
-	execute origional_buffer . 'buffer'
+	" Return to the original location
+	execute original_buffer . 'buffer'
 	if line("'z") > 0
 		norm! `z
 	else
@@ -464,13 +467,13 @@ function! s:RemoveFillerLines() " {{{1
 		return
 	endif
 
-	" Set a mark at the origional cursor position
+	" Set a mark at the original cursor position
 	norm! mz
 
 	" Remove all filler lines from all windows
 	silent! windo %s/\s*<<imgline>>\n//
 
-	" Return to the origional cursor position
+	" Return to the original cursor position
 	if line("'z") > 0
 		norm! `z
 	else

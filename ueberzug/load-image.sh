@@ -1,7 +1,8 @@
-#!/bin/bash
-source "`ueberzug library`"
-
-ImageLayer 0< <(
-	ImageLayer::add [identifier]="neovim-$1" [x]="$3" [y]="$4" [max_height]="$5" [path]="$2"
-	read
+#!/bin/sh
+ueberzug layer --parser bash 0< <(
+    declare -Ap add_command=([action]="add" [identifier]="example0" [path]=$1 [x]=$2 [y]=$3 [height]=$4)
+    while [ 1 ]; do
+        sleep 1
+    done
 )
+

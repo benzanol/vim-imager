@@ -1,9 +1,9 @@
 " Set default values for user modifiable settings {{{1
 " Filetypes to search for images in
-let g:imager#filetypes = ['noteview']
+let g:imager#filetypes = ['md']
 
 " Whether or not to search for images in all filetypes
-let g:imager#all_filetypes = 0
+let g:imager#all_filetypes = 1
 
 " Set the colors of latex expressions
 let g:imager#latex_foreground = 'white'

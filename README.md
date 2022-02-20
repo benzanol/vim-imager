@@ -13,14 +13,14 @@ Make sure that python3 is installed, and run the following command:\
 
 ### Install with Vim Plug
 Add the following to your vimrc\
-`Plug 'AdamTillou/vim-imager'`
+`Plug 'qaiviq/vim-imager'`
 
 Then reload vim and run the command
 `PlugInstall`
 
 ### Install with Vundle
 Add the following to your vimrc\
-`Plugin 'AdamTillou/vim-imager'`
+`Plugin 'qaiviq/vim-imager'`
 
 Then reload vim and run the command
 `PluginInstall`
